@@ -1,0 +1,25 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin2026
+      - RABBITMQ_DEFAULT_VHOST=/
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+
+  mysql:
+    image: mysql:8.0
+    container_name: rabbitmq-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=opc.tang2026
+      - MYSQL_DATABASE=rocketmq_orderly
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ../sql:/docker-entrypoint-initdb.d

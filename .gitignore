@@ -76,5 +76,14 @@ bin/
 # Mac
 .DS_Store
 
-# RocketMQ data
-data/
+# Docker data
+docker/data/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# OS generated files
+Thumbs.db
+Desktop.ini
