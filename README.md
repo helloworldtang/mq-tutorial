@@ -148,22 +148,35 @@ public class OrderConsumer implements RocketMQListener<OrderMessage> {
 }
 ```
 
-### 2. RabbitMQ：单队列 + 顺序消费
+### 2. RabbitMQ：路由键 + 多队列 + 顺序消费
 
 ```java
-// 生产者：发送到指定队列
-rabbitTemplate.convertAndSend(
-    "order-exchange",
-    "order-routing-key",
-    orderMessage
-);
+// 生产者：使用订单ID作为路由键
+String routingKey = "order." + (orderId % 3); // 假设有3个队列
+rabbitTemplate.convertAndSend("order-exchange", routingKey, orderMessage);
 
-// 消费者：单线程顺序消费
-@RabbitListener(queues = "order-queue")
-public void handleOrderMessage(OrderMessage message) {
+// 消费者：每个队列单线程消费
+@RabbitListener(queues = "OrderQueue0")
+public void handleOrderQueue0(Message message) {
+    processOrderMessage(message);
+}
+
+@RabbitListener(queues = "OrderQueue1")
+public void handleOrderQueue1(Message message) {
+    processOrderMessage(message);
+}
+
+@RabbitListener(queues = "OrderQueue2")
+public void handleOrderQueue2(Message message) {
     processOrderMessage(message);
 }
 ```
+
+**RabbitMQ 核心机制：**
+- **路由键**：使用 `order.{orderId % 3}` 作为路由键
+- **多队列**：3个队列实现并行消费
+- **顺序消费**：每个队列单消费者单线程消费
+- **局部顺序**：同一订单的消息进入同一队列
 
 ### 3. 业务逻辑：版本号 + 幂等性
 
@@ -184,13 +197,49 @@ if (rows == 0) {
 
 ## 测试验证
 
-### 1. 验证顺序性
+### RocketMQ 测试
+
+**1. 验证顺序性**
 
 发送多个订单消息，验证同一订单的状态按预期顺序更新。
 
-### 2. 验证幂等性
+**2. 验证幂等性**
 
 发送相同的订单消息，验证订单状态只更新一次。
+
+**运行测试：**
+```bash
+cd rocketmq-orderly
+mvn test
+```
+
+---
+
+### RabbitMQ 测试
+
+**1. 验证局部顺序**
+
+发送多个订单的消息，验证同一订单的消息按顺序消费，不同订单的消息可以并行消费。
+
+**2. 验证版本号过滤**
+
+发送过时消息，验证过时消息被过滤。
+
+**3. 验证幂等性**
+
+发送相同的消息两次，验证第二次发送不会改变订单状态。
+
+**运行测试：**
+```bash
+cd rabbitmq-orderly
+mvn test
+```
+
+**运行演示程序：**
+```bash
+cd rabbitmq-orderly
+mvn spring-boot:run -Dspring-boot.run.arguments=--spring.main.application-launcher=com.example.rabbitmq.DemoApplication
+```
 
 ## 💡 实战案例
 
@@ -346,6 +395,146 @@ docker volume prune
 - ✅ 验证了幂等性保护机制
 - ✅ 展示了生产环境的使用方式
 
+---
+
+### RabbitMQ 案例：订单状态流转完整演示
+
+以下演示如何使用 RabbitMQ 模块实现一个完整的订单状态流转，从创建到收货。
+
+#### 步骤 1：启动 RabbitMQ 环境
+
+```bash
+cd docker
+docker-compose -f docker-compose-rabbitmq.yml up -d
+
+# 等待服务启动
+sleep 20
+
+# 验证 RabbitMQ 是否正常运行
+docker ps | grep rabbitmq
+```
+
+**预期输出：**
+```
+rabbitmq         Up 20s
+rabbitmq-mysql   Up 20s
+```
+
+#### 步骤 2：启动 RabbitMQ 应用
+
+```bash
+cd rabbitmq-orderly
+mvn spring-boot:run
+```
+
+**预期输出：**
+```
+Started RabbitMQApplication in 3.2 seconds
+```
+
+#### 步骤 3：测试订单状态流转
+
+创建测试类或使用 DemoApplication 演示：
+
+```java
+// 发送订单创建消息
+producer.sendOrderMessage(1001, "CREATE_ORDER", 1);
+
+// 发送订单支付消息
+producer.sendOrderMessage(1001, "PAY_ORDER", 2);
+
+// 发送订单发货消息
+producer.sendOrderMessage(1001, "SHIP_ORDER", 3);
+
+// 发送订单收货消息
+producer.sendOrderMessage(1001, "RECEIVE_ORDER", 4);
+```
+
+#### 步骤 4：验证订单状态
+
+```bash
+# 登录 MySQL 容器
+docker exec -it rabbitmq-mysql mysql -uroot -popc.tang2026
+
+# 查询订单状态
+USE rocketmq_orderly;
+SELECT * FROM `order` WHERE id = 1001;
+```
+
+**预期输出：**
+```
++------+---------+---------+---------------------+---------------------+
+| id   | status  | version | create_time         | update_time         |
++------+---------+---------+---------------------+---------------------+
+| 1001 | RECEIVED| 4       | 2026-04-19 10:00:00| 2026-04-19 10:01:00|
++------+---------+---------+---------------------+---------------------+
+```
+
+#### 步骤 5：测试局部顺序
+
+快速发送多个订单的多个事件：
+
+```java
+// 订单1002、1003、1004并发发送消息
+for (int orderId : new int[]{1002, 1003, 1004}) {
+    new Thread(() -> {
+        producer.sendOrderMessages(orderId,
+            "CREATE_ORDER", "PAY_ORDER", "SHIP_ORDER");
+    }).start();
+}
+```
+
+**预期结果：**
+- 订单1002、1003、1004各自按顺序消费
+- 不同订单的消息可以并行处理
+- 订单1002(1002%3=2) → OrderQueue2
+- 订单1003(1003%3=1) → OrderQueue1
+- 订单1004(1004%3=2) → OrderQueue2
+
+#### 步骤 6：测试版本号过滤
+
+```java
+// 先发送支付消息
+producer.sendOrderMessage(1005, "PAY_ORDER", 2);
+
+// 再发送创建消息（version=1，过时消息）
+producer.sendOrderMessage(1005, "CREATE_ORDER", 1);
+```
+
+**预期结果：** 创建消息会被过滤，订单状态保持为 PAID。
+
+#### 步骤 7：查看 RabbitMQ 管理界面
+
+访问 RabbitMQ 管理界面：http://localhost:15672
+
+- 用户名：admin
+- 密码：admin2026
+
+**查看内容：**
+- Queues：OrderQueue0、OrderQueue1、OrderQueue2
+- Exchanges：order-exchange（Direct Exchange）
+- Bindings：
+  - OrderQueue0 ← order.0
+  - OrderQueue1 ← order.1
+  - OrderQueue2 ← order.2
+
+#### 步骤 8：运行测试验证
+
+```bash
+cd rabbitmq-orderly
+mvn test
+```
+
+**预期结果：**
+- 所有测试用例通过
+- 验证局部顺序、版本号过滤、幂等性等
+
+**总结：**
+- ✅ 成功演示了 RabbitMQ 的局部顺序消息
+- ✅ 验证了路由键机制保证同一订单进入同一队列
+- ✅ 验证了多队列并行消费的性能优势
+- ✅ 验证了版本号过滤和幂等性保护机制
+
 ## 常见问题
 
 ### Q1: 为什么不做全局有序？
@@ -355,12 +544,16 @@ docker volume prune
 ### Q2: 如何保证同一订单的消息进入同一个队列？
 
 RocketMQ：使用哈希路由，根据订单ID选择队列：`hash(orderId) % queueCount`
-RabbitMQ：使用单队列，所有消息进入同一个队列
+RabbitMQ：使用订单ID作为路由键：`order.{orderId % queueCount}`，同一订单的消息进入同一队列
 
 ### Q3: 如何保证队列被顺序消费？
 
 RocketMQ：使用 `ConsumeMode.ORDERLY` 模式
-RabbitMQ：使用单消费者监听队列
+RabbitMQ：每个队列配置单消费者监听
+
+### Q4: RabbitMQ 如何实现局部顺序？
+
+使用订单ID作为路由键（`order.{orderId % queueCount}`），同一订单的消息会进入同一个队列，不同订单的消息可以进入不同队列，实现并行消费。
 
 ### Q4: 如何防止订单状态乱序？
 
