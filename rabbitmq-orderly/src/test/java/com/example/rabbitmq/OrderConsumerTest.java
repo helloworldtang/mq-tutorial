@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 3. 验证版本号过滤：过时消息会被过滤
  * 4. 验证幂等性：重复消息不会重复处理
  */
-@SpringBootTest
+@SpringBootTest(classes = com.example.rabbitmq.RabbitMQApplication.class)
 public class OrderConsumerTest {
 
     @Autowired

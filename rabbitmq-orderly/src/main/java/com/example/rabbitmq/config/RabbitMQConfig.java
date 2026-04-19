@@ -1,5 +1,7 @@
 package com.example.rabbitmq.config;
 
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.annotation.MapperScan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.*;
@@ -19,6 +21,7 @@ import org.springframework.context.annotation.Configuration;
  * 3. 使用订单ID作为路由键，保证同一订单进入同一队列
  */
 @Configuration
+@MapperScan("com.example.common.mapper")
 public class RabbitMQConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(RabbitMQConfig.class);
