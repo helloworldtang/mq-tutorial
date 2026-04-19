@@ -3,13 +3,15 @@ package com.example.rocketmq.producer;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.common.entity.Order;
+import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.client.producer.MessageQueueSelector;
 import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -36,19 +38,26 @@ public class OrderProducer {
             orderJson.put("eventType", eventType);
             orderJson.put("version", version);
 
-            // 2. 构建Spring消息
-            Message<String> message = MessageBuilder.withPayload(orderJson.toJSONString())
-                .setHeader("orderId", orderId)
-                .build();
+            // 2. 构建RocketMQ消息
+            Message message = new Message(
+                "OrderTopic",
+                orderJson.toJSONString().getBytes()
+            );
 
             // 3. 使用哈希路由发送消息
-            SendResult result = rocketMQTemplate.syncSend(
-                "OrderTopic",
+            SendResult result = rocketMQTemplate.getProducer().send(
                 message,
-                (mqs, msg, arg) -> {
-                    Integer id = (Integer) arg;
-                    int index = Math.abs(id) % mqs.size();
-                    return mqs.get(index);
+                new MessageQueueSelector() {
+                    @Override
+                    public MessageQueue select(
+                        List<MessageQueue> mqs,
+                        Message msg,
+                        Object arg
+                    ) {
+                        Integer id = (Integer) arg;
+                        int index = Math.abs(id) % mqs.size();
+                        return mqs.get(index);
+                    }
                 },
                 orderId
             );
