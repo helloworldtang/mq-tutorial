@@ -79,6 +79,9 @@ bin/
 # Docker data
 docker/data/
 
+# Claude Code configuration (local tool config, not committed)
+.claude/
+
 # Temporary files
 *.tmp
 *.bak
