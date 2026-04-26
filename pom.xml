@@ -29,8 +29,12 @@
 
     <modules>
         <module>common</module>
+        <module>rabbitmq-common</module>
         <module>rocketmq-orderly</module>
         <module>rabbitmq-orderly</module>
+        <module>rabbitmq-orderly-sac</module>
+        <module>rabbitmq-orderly-dlock</module>
+        <module>rabbitmq-orderly-exclusive</module>
     </modules>
 
     <dependencyManagement>
@@ -69,6 +73,13 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-amqp</artifactId>
                 <version>${spring-boot.version}</version>
+            </dependency>
+
+            <!-- Redisson -->
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>3.25.2</version>
             </dependency>
 
             <!-- FastJSON -->

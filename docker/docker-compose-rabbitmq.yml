@@ -23,3 +23,11 @@ services:
     volumes:
       - ./data/mysql:/var/lib/mysql
       - ../sql:/docker-entrypoint-initdb.d
+
+  redis:
+    image: redis:6-alpine
+    container_name: rabbitmq-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data

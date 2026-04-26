@@ -9,41 +9,29 @@
         <groupId>com.example</groupId>
         <artifactId>mq-tutorial</artifactId>
         <version>1.0.0</version>
-        <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>rabbitmq-orderly</artifactId>
-    <name>RabbitMQ Module</name>
-    <description>RabbitMQ消息模块：支持顺序消息</description>
+    <artifactId>rabbitmq-common</artifactId>
+    <name>RabbitMQ Common Module</name>
+    <description>RabbitMQ模块公共代码：状态机、消息模型、抽象消费者/生产者、DLQ、Publisher Confirm</description>
 
     <dependencies>
-        <!-- Common Module -->
         <dependency>
             <groupId>com.example</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>
         </dependency>
 
-        <!-- RabbitMQ Common -->
-        <dependency>
-            <groupId>com.example</groupId>
-            <artifactId>rabbitmq-common</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <!-- RabbitMQ -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
 
-        <!-- Jackson -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
         </dependency>
 
-        <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -56,9 +44,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <finalName>${project.artifactId}-${project.version}</finalName>
-    </build>
-
 </project>

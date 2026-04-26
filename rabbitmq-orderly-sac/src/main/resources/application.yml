@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: rabbitmq-orderly-sac
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/rocketmq_orderly?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: opc.tang2026
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: admin2026
+    vhost: /
+
+rabbitmq:
+  exchange: sac-order-exchange
+
+mybatis:
+  mapper-locations: classpath*:mapper/*.xml
+  type-aliases-package: com.example.common.entity
+
+logging:
+  level:
+    com.example: DEBUG
+    org.springframework.amqp: INFO

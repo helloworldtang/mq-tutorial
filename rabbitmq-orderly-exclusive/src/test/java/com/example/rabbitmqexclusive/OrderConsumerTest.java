@@ -1,17 +1,15 @@
-package com.example.rabbitmq;
+package com.example.rabbitmqexclusive;
 
 import com.example.common.entity.Order;
 import com.example.common.mapper.OrderMapper;
-import com.example.rabbitmq.producer.OrderProducer;
+import com.example.rabbitmqexclusive.producer.OrderProducer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.time.LocalDateTime;
-
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(classes = com.example.rabbitmq.RabbitMQApplication.class)
+@SpringBootTest(classes = RabbitMQExclusiveApplication.class)
 public class OrderConsumerTest {
 
     @Autowired
@@ -22,7 +20,7 @@ public class OrderConsumerTest {
 
     @Test
     public void testSingleOrderSequentialMessage() {
-        int orderId = 1001;
+        int orderId = 4001;
 
         orderProducer.sendOrderMessage(orderId, "CREATE_ORDER", 1);
         orderProducer.sendOrderMessage(orderId, "PAY_ORDER", 2);
@@ -35,46 +33,19 @@ public class OrderConsumerTest {
         assertEquals("SHIPPING", order.getStatus(), "订单状态应该是 SHIPPING");
         assertEquals(3, order.getVersion(), "订单版本号应该是 3");
 
-        System.out.println("✅ 测试通过：单个订单顺序消息处理正确");
-    }
-
-    @Test
-    public void testMultipleOrderConcurrentMessage() {
-        int[] orderIds = {1011, 1012, 1013};
-
-        for (int orderId : orderIds) {
-            new Thread(() -> {
-                orderProducer.sendOrderMessages(orderId,
-                    "CREATE_ORDER", "PAY_ORDER", "SHIP_ORDER");
-            }).start();
-        }
-
-        sleep(10000);
-
-        for (int orderId : orderIds) {
-            Order order = orderMapper.selectById(orderId);
-            assertNotNull(order, "订单" + orderId + "应该存在");
-            assertEquals("SHIPPING", order.getStatus(),
-                "订单" + orderId + "状态应该是 SHIPPING");
-            assertEquals(3, order.getVersion(),
-                "订单" + orderId + "版本号应该是 3");
-        }
-
-        System.out.println("✅ 测试通过：多个订单并发处理正确");
+        System.out.println("✅ Exclusive测试通过：单个订单顺序消息处理正确");
     }
 
     @Test
     public void testVersionFilter() {
-        int orderId = 1014;
+        int orderId = 4004;
 
         orderProducer.sendOrderMessage(orderId, "CREATE_ORDER", 1);
         sleep(2000);
 
-        // 先发送高版本
         orderProducer.sendOrderMessage(orderId, "PAY_ORDER", 3);
         sleep(2000);
 
-        // 再发送低版本（应该被过滤）
         orderProducer.sendOrderMessage(orderId, "SHIP_ORDER", 2);
         sleep(3000);
 
@@ -84,18 +55,16 @@ public class OrderConsumerTest {
             "订单状态应该是 PAID（version=2的SHIP被过滤）");
         assertEquals(3, order.getVersion(), "订单版本号应该是 3");
 
-        System.out.println("✅ 测试通过：版本号过滤正确");
+        System.out.println("✅ Exclusive测试通过：版本号过滤正确");
     }
 
     @Test
     public void testIdempotency() {
-        int orderId = 1015;
+        int orderId = 4005;
 
-        // 先创建订单
         orderProducer.sendOrderMessage(orderId, "CREATE_ORDER", 1);
         sleep(2000);
 
-        // 发送两次相同的支付消息（同版本号）
         orderProducer.sendOrderMessage(orderId, "PAY_ORDER", 2);
         sleep(1000);
         orderProducer.sendOrderMessage(orderId, "PAY_ORDER", 2);
@@ -106,12 +75,12 @@ public class OrderConsumerTest {
         assertEquals("PAID", order.getStatus(), "订单状态应该是 PAID");
         assertEquals(2, order.getVersion(), "订单版本号应该是 2");
 
-        System.out.println("✅ 测试通过：幂等性正确，重复消息不会重复处理");
+        System.out.println("✅ Exclusive测试通过：幂等性正确");
     }
 
     @Test
     public void testInvalidStatusTransition() {
-        int orderId = 1016;
+        int orderId = 4006;
 
         orderProducer.sendOrderMessage(orderId, "CREATE_ORDER", 1);
         sleep(2000);
@@ -124,25 +93,7 @@ public class OrderConsumerTest {
         assertNotEquals("RECEIVED", order.getStatus(),
             "订单状态不应该是 RECEIVED（非法流转被拒绝）");
 
-        System.out.println("✅ 测试通过：非法状态流转被正确拒绝");
-    }
-
-    @Test
-    public void testQueueRouting() {
-        int[] orderIds = {1017, 1018, 1019};
-
-        for (int orderId : orderIds) {
-            orderProducer.sendOrderMessage(orderId, "CREATE_ORDER", 1);
-        }
-
-        sleep(5000);
-
-        for (int orderId : orderIds) {
-            Order order = orderMapper.selectById(orderId);
-            assertNotNull(order, "订单" + orderId + "应该存在");
-        }
-
-        System.out.println("✅ 测试通过：队列路由正确");
+        System.out.println("✅ Exclusive测试通过：非法状态流转被正确拒绝");
     }
 
     private void sleep(long millis) {

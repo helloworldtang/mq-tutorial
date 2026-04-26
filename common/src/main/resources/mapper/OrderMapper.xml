@@ -17,9 +17,9 @@
         WHERE id = #{orderId}
     </select>
 
-    <insert id="insert" parameterType="com.example.common.entity.Order" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO `order` (status, version, create_time, update_time)
-        VALUES (#{status}, #{version}, #{createTime}, #{updateTime})
+    <insert id="insert" parameterType="com.example.common.entity.Order">
+        INSERT INTO `order` (id, status, version, create_time, update_time)
+        VALUES (#{id}, #{status}, #{version}, #{createTime}, #{updateTime})
     </insert>
 
     <update id="updateStatusWithVersion">

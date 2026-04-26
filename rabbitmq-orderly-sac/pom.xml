@@ -12,12 +12,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>rabbitmq-orderly</artifactId>
-    <name>RabbitMQ Module</name>
-    <description>RabbitMQ消息模块：支持顺序消息</description>
+    <artifactId>rabbitmq-orderly-sac</artifactId>
+    <name>RabbitMQ SAC Module</name>
+    <description>RabbitMQ Single Active Consumer方案：解决多进程部署下的顺序消息问题</description>
 
     <dependencies>
-        <!-- Common Module -->
         <dependency>
             <groupId>com.example</groupId>
             <artifactId>common</artifactId>
@@ -31,19 +30,16 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- RabbitMQ -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
 
-        <!-- Jackson -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
-        <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

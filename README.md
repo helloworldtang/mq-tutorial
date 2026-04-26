@@ -6,564 +6,365 @@
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.12-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## 🌟 项目亮点
-
-- ✅ **双中间件支持**：同时支持 RocketMQ 和 RabbitMQ 两种消息队列
-- ✅ **局部顺序保证**：使用哈希路由实现业务维度顺序消息
-- ✅ **幂等性保障**：版本号乐观锁防止状态乱序和重复更新
-- ✅ **完整状态机**：覆盖订单从创建到收货的完整生命周期
-- ✅ **生产级代码**：完善的异常处理和日志记录，可直接用于生产环境
-
 ## 项目简介
 
-这是一个多模块实战项目，演示如何使用 RocketMQ 和 RabbitMQ 实现局部顺序消息，保证订单状态机不乱序。
+多模块实战项目，演示如何在 RocketMQ 和 RabbitMQ 中实现**业务维度局部顺序消息**，保证订单状态机不会因并发消费而乱序。
 
-## 核心知识点
+**订单状态流转链路：**
 
-1. **哈希路由**：根据订单ID选择队列，保证同一订单的消息进入同一个队列
-2. **顺序消费**：使用顺序消费监听器，保证同一个队列只能被一个消费者单线程消费
-3. **版本号 + 幂等性**：使用版本号做乐观锁，保证订单状态不会乱序或重复更新
+```
+PENDING → PAID → SHIPPING → SHIPPED → RECEIVED
+    ↓
+CANCELLED (仅 PENDING 可取消)
+```
 
-## 技术栈
+**全局顺序 vs 局部顺序：**
 
-- Java 17
-- Spring Boot 3.2
-- RocketMQ 5.1.0
-- RabbitMQ 3.12
-- MySQL 8.0
-- MyBatis 3.0
-- JUnit 5
+| 类型 | 说明 | 性能 | 适用场景 |
+|------|------|------|----------|
+| 全局顺序 | 所有消息严格按时间顺序处理 | 差（单消费者） | 基本不可用 |
+| 局部顺序 | 同一业务KEY的消息有序，不同KEY可并行 | 好 | ✅ 生产推荐 |
+
+本项目采用**局部顺序**方案，同一订单的消息有序，不同订单可并行处理。
 
 ## 项目结构
 
 ```
 mq-tutorial/
-├── pom.xml                              # 父 POM
-├── common/                              # 公共模块
-│   ├── pom.xml
-│   └── src/main/java/com/example/common/
-│       ├── entity/Order.java            # 订单实体
-│       ├── mapper/OrderMapper.java      # Mapper 接口
-│       └── resources/mapper/OrderMapper.xml
+├── pom.xml
+├── common/                              # 公共模块（实体、Mapper）
+├── rabbitmq-common/                     # RabbitMQ 公共模块
+│   └── src/main/java/com/example/rabbitmq/common/
+│       ├── constant/MQConstants.java     # 常量（队列数、死信队列命名）
+│       ├── message/OrderMessage.java    # 统一消息模型
+│       ├── statemachine/OrderStatusMachine.java  # 状态机
+│       └── consumer/AbstractOrderConsumer.java   # 消费者抽象基类
 ├── rocketmq-orderly/                    # RocketMQ 模块
-│   ├── pom.xml
-│   └── src/main/java/com/example/rocketmq/
-│       ├── RocketMQApplication.java     # 启动类
-│       ├── producer/OrderProducer.java  # 生产者
-│       ├── consumer/OrderConsumer.java  # 消费者
-│       ├── config/RocketMQConfig.java  # 配置类
-│       └── resources/application.yml
-├── rabbitmq-orderly/                    # RabbitMQ 模块
-│   ├── pom.xml
-│   └── src/main/java/com/example/rabbitmq/
-│       ├── RabbitMQApplication.java     # 启动类
-│       ├── producer/OrderProducer.java  # 生产者
-│       ├── consumer/OrderConsumer.java  # 消费者
-│       ├── config/RabbitMQConfig.java   # 配置类
-│       └── resources/application.yml
-├── docker/                              # Docker 配置
-│   ├── docker-compose-rocketmq.yml     # RocketMQ 环境配置
-│   └── docker-compose-rabbitmq.yml     # RabbitMQ 环境配置
-├── sql/
-│   └── init.sql                         # 数据库初始化脚本
-└── conf/
-    └── broker.conf                      # RocketMQ Broker 配置
+├── rabbitmq-orderly/                    # RabbitMQ · 基础方案
+├── rabbitmq-orderly-sac/               # RabbitMQ · SAC 方案
+├── rabbitmq-orderly-dlock/             # RabbitMQ · 分布式锁方案
+├── rabbitmq-orderly-exclusive/         # RabbitMQ · Exclusive Consumer 方案
+├── docker/
+│   ├── docker-compose-rocketmq.yml
+│   └── docker-compose-rabbitmq.yml     # 含 MySQL + Redis
+└── sql/init.sql
 ```
+
+## 技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Java | 17 | 运行环境 |
+| Spring Boot | 3.2 | 基础框架 |
+| RocketMQ | 5.1.0 | 消息队列 |
+| RabbitMQ | 3.12 | 消息队列 |
+| MySQL | 8.0 | 持久化订单数据 |
+| MyBatis | 3.0 | ORM 框架 |
+| Redisson | 3.25 | 分布式锁（dlock 模块） |
+| JUnit 5 | 5.10 | 单元测试 |
 
 ## 快速开始
 
-### 1. 选择消息中间件
+### 1. 启动依赖环境
 
-项目支持 RocketMQ 和 RabbitMQ，你可以根据需求选择：
-
-- **RocketMQ**：适合大规模、高并发的消息场景
-- **RabbitMQ**：适合灵活的路由规则和简单的顺序消息场景
-
-### 2. 启动环境
-
-**RocketMQ 环境：**
-```bash
-cd docker
-docker-compose -f docker-compose-rocketmq.yml up -d
-```
-
-**RabbitMQ 环境：**
 ```bash
 cd docker
 docker-compose -f docker-compose-rabbitmq.yml up -d
+
+# 验证服务状态
+docker ps | grep -E "rabbitmq|mysql|redis"
 ```
 
-### 3. 初始化数据库
+访问 RabbitMQ 管理界面：http://localhost:15672（用户名 admin，密码 admin2026）
 
-数据库会在 Docker 容器启动时自动初始化，无需手动执行。
+### 2. 初始化数据库
 
-### 4. 运行应用
+表结构在 `sql/init.sql`，Docker 启动时自动初始化。
 
-**RocketMQ 模块：**
+### 3. 编译项目
+
 ```bash
-cd rocketmq-orderly
-mvn spring-boot:run
+mvn clean install -DskipTests
 ```
 
-**RabbitMQ 模块：**
+### 4. 运行测试
+
 ```bash
-cd rabbitmq-orderly
-mvn spring-boot:run
+# 运行所有 RabbitMQ 模块测试
+mvn test -pl rabbitmq-orderly,rabbitmq-orderly-sac,rabbitmq-orderly-dlock,rabbitmq-orderly-exclusive
+
+# 运行指定模块测试
+mvn test -pl rabbitmq-orderly-sac
 ```
 
-## 核心代码
+---
 
-### 1. RocketMQ：哈希路由 + 顺序消费
+## 核心机制（所有模块共享）
+
+### 1. 哈希路由
 
 ```java
-// 生产者：哈希路由
-SendResult sendResult = producer.send(
-    message,
-    new MessageQueueSelector() {
-        @Override
-        public MessageQueue select(
-            List<MessageQueue> mqs,
-            Message msg,
-            Object arg
-        ) {
-            Integer orderId = (Integer) arg;
-            int index = Math.abs(orderId) % mqs.size();
-            return mqs.get(index);
-        }
-    },
-    orderId
-);
-
-// 消费者：顺序消费
-@RocketMQMessageListener(
-    topic = "order-topic",
-    consumerGroup = "order-consumer-group",
-    consumeMode = ConsumeMode.ORDERLY
-)
-public class OrderConsumer implements RocketMQListener<OrderMessage> {
-    @Override
-    public void onMessage(OrderMessage message) {
-        processOrderMessage(message);
-    }
-}
+// 同一订单的所有消息进入同一个队列
+String routingKey = "order." + (orderId % 3);
+// orderId=1001 → routingKey="order.1" → OrderQueue1
+// orderId=1002 → routingKey="order.2" → OrderQueue2
+// orderId=1003 → routingKey="order.0" → OrderQueue0
+rabbitTemplate.convertAndSend(exchange, routingKey, message);
 ```
 
-### 2. RabbitMQ：路由键 + 多队列 + 顺序消费
+### 2. 版本号乐观锁（防乱序 + 幂等性）
 
 ```java
-// 生产者：使用订单ID作为路由键
-String routingKey = "order." + (orderId % 3); // 假设有3个队列
-rabbitTemplate.convertAndSend("order-exchange", routingKey, orderMessage);
+// 数据库更新带版本号条件
+UPDATE orders SET status='PAID', version=2
+WHERE id=? AND version=1;
 
-// 消费者：每个队列单线程消费
-@RabbitListener(queues = "OrderQueue0")
-public void handleOrderQueue0(Message message) {
-    processOrderMessage(message);
-}
-
-@RabbitListener(queues = "OrderQueue1")
-public void handleOrderQueue1(Message message) {
-    processOrderMessage(message);
-}
-
-@RabbitListener(queues = "OrderQueue2")
-public void handleOrderQueue2(Message message) {
-    processOrderMessage(message);
-}
-```
-
-**RabbitMQ 核心机制：**
-- **路由键**：使用 `order.{orderId % 3}` 作为路由键
-- **多队列**：3个队列实现并行消费
-- **顺序消费**：每个队列单消费者单线程消费
-- **局部顺序**：同一订单的消息进入同一队列
-
-### 3. 业务逻辑：版本号 + 幂等性
-
-```java
-int rows = orderMapper.updateStatusWithVersion(
-    orderId,
-    targetStatus,
-    order.getVersion(),
-    newVersion
-);
-
-if (rows == 0) {
-    log.warn("版本冲突，更新失败: orderId={}, currentVersion={}",
-             orderId, order.getVersion());
+// 新版本 ≤ 当前版本 → 消息过期，跳过处理
+if (newVersion <= currentVersion) {
+    logger.warn("消息过时，跳过: orderId={}, msgVersion={}, dbVersion={}",
+                orderId, newVersion, currentVersion);
     return;
 }
 ```
 
-## 测试验证
+### 3. 状态机校验
 
-### RocketMQ 测试
+```java
+// 只允许合法流转，拒绝乱序操作
+PENDING  → PAID / CANCELLED
+PAID     → SHIPPING
+SHIPPING → SHIPPED
+SHIPPED  → RECEIVED
 
-**1. 验证顺序性**
+// 非法流转示例：PENDING → RECEIVED（跳步）→ 被拒绝
+```
 
-发送多个订单消息，验证同一订单的状态按预期顺序更新。
+### 4. 死信队列（DLQ）
 
-**2. 验证幂等性**
+```
+消费失败 (throw RuntimeException)
+        ↓
+消息进入 DLQ（带原始消息内容）
+        ↓
+运维排查 + 人工补偿
+```
 
-发送相同的订单消息，验证订单状态只更新一次。
+### 5. Publisher Confirm
 
-**运行测试：**
-```bash
-cd rocketmq-orderly
-mvn test
+```java
+// 消息到达 Broker 确认
+template.setConfirmCallback((correlationData, ack, cause) -> {
+    if (!ack) {
+        logger.error("消息发送失败: {}", cause);
+    }
+});
+
+// 消息无法路由（无匹配队列）
+template.setReturnsCallback(returned -> {
+    logger.error("消息无法路由: exchange={}, routingKey={}",
+                 returned.getExchange(), returned.getRoutingKey());
+});
 ```
 
 ---
 
-### RabbitMQ 测试
+## 四种 RabbitMQ 方案对比
 
-**1. 验证局部顺序**
+### 方案一：基础方案 `rabbitmq-orderly`
 
-发送多个订单的消息，验证同一订单的消息按顺序消费，不同订单的消息可以并行消费。
-
-**2. 验证版本号过滤**
-
-发送过时消息，验证过时消息被过滤。
-
-**3. 验证幂等性**
-
-发送相同的消息两次，验证第二次发送不会改变订单状态。
-
-**运行测试：**
-```bash
-cd rabbitmq-orderly
-mvn test
-```
-
-**运行演示程序：**
-```bash
-cd rabbitmq-orderly
-mvn spring-boot:run -Dspring-boot.run.arguments=--spring.main.application-launcher=com.example.rabbitmq.DemoApplication
-```
-
-## 💡 实战案例
-
-### 案例：订单状态流转完整演示
-
-以下演示如何使用本项目实现一个完整的订单状态流转，从创建到收货。
-
-#### 步骤 1：启动 RocketMQ 环境
-
-```bash
-cd docker
-docker-compose -f docker-compose-rocketmq.yml up -d
-
-# 等待服务启动
-sleep 30
-
-# 验证 RocketMQ 是否正常运行
-docker ps | grep rocketmq
-```
-
-**预期输出：**
-```
-rocketmq-namesrv   Up 30s
-rocketmq-broker    Up 30s
-rocketmq-console   Up 30s
-rocketmq-mysql     Up 30s
-```
-
-#### 步骤 2：启动 RocketMQ 应用
-
-```bash
-cd rocketmq-orderly
-mvn spring-boot:run
-```
-
-**预期输出：**
-```
-Started RocketMQApplication in 3.5 seconds
-```
-
-#### 步骤 3：测试订单状态流转
-
-创建测试类或使用 Postman 发送以下请求：
+**原理：** 单队列单消费者，通过 Spring AMQP 默认单线程消费保证队列内顺序。
 
 ```java
-// 发送订单创建消息
-producer.sendOrderMessage(1001, "CREATE_ORDER", 1);
-
-// 发送订单支付消息
-producer.sendOrderMessage(1001, "PAY_ORDER", 2);
-
-// 发送订单发货消息
-producer.sendOrderMessage(1001, "SHIP_ORDER", 3);
-
-// 发送订单收货消息
-producer.sendOrderMessage(1001, "RECEIVE_ORDER", 4);
-```
-
-#### 步骤 4：验证订单状态
-
-```bash
-# 登录 MySQL 容器
-docker exec -it rocketmq-mysql mysql -uroot -popc.tang2026
-
-# 查询订单状态
-USE rocketmq_orderly;
-SELECT * FROM `order` WHERE id = 1001;
-```
-
-**预期输出：**
-```
-+------+---------+---------+---------------------+---------------------+
-| id   | status  | version | create_time         | update_time         |
-+------+---------+---------+---------------------+---------------------+
-| 1001 | RECEIVED| 4       | 2026-04-18 18:00:00| 2026-04-18 18:01:00|
-+------+---------+---------+---------------------+---------------------+
-```
-
-#### 步骤 5：测试顺序性保证
-
-快速发送相同订单的多个事件：
-
-```java
-// 快速连续发送
-producer.sendOrderMessage(1002, "CREATE_ORDER", 1);
-producer.sendOrderMessage(1002, "PAY_ORDER", 2);
-producer.sendOrderMessage(1002, "SHIP_ORDER", 3);
-producer.sendOrderMessage(1002, "RECEIVE_ORDER", 4);
-```
-
-**预期结果：** 订单状态会按照 CREATE_ORDER → PAY_ORDER → SHIP_ORDER → RECEIVE_ORDER 的顺序更新，不会出现乱序。
-
-#### 步骤 6：测试幂等性
-
-重复发送相同的事件：
-
-```java
-// 发送支付消息两次
-producer.sendOrderMessage(1003, "CREATE_ORDER", 1);
-producer.sendOrderMessage(1003, "PAY_ORDER", 2);
-producer.sendOrderMessage(1003, "PAY_ORDER", 2); // 重复发送
-producer.sendOrderMessage(1003, "SHIP_ORDER", 3);
-```
-
-**预期结果：** 第二次 PAY_ORDER 不会改变订单状态，版本号保持不变，保证幂等性。
-
-#### 步骤 7：查看 RocketMQ 控制台
-
-访问 RocketMQ 控制台：http://localhost:8081
-
-- 查看 OrderTopic 的消息数量
-- 查看消费者消费情况
-- 查看消息轨迹
-
-**预期界面：**
-- Topic: OrderTopic
-- 消息总数：12
-- 消费者组：order-consumer
-- 消费进度：100%
-
-#### 步骤 8：验证数据库数据
-
-```bash
-# 查询所有订单
-SELECT * FROM `order` ORDER BY id;
-```
-
-**预期输出：**
-```
-+------+---------+---------+---------------------+
-| id   | status  | version | update_time         |
-+------+---------+---------+---------------------+
-| 1001 | RECEIVED| 4       | 2026-04-18 18:01:00|
-| 1002 | RECEIVED| 4       | 2026-04-18 18:02:00|
-| 1003 | SHIPPING| 3       | 2026-04-18 18:03:00|
-+------+---------+---------+---------------------+
-```
-
-### 清理环境
-
-```bash
-# 停止并删除 Docker 容器
-cd docker
-docker-compose -f docker-compose-rocketmq.yml down
-
-# 清理数据卷（可选）
-docker volume prune
-```
-
-**总结：**
-- ✅ 成功演示了订单状态的完整流转
-- ✅ 验证了消息的顺序性保证
-- ✅ 验证了幂等性保护机制
-- ✅ 展示了生产环境的使用方式
-
----
-
-### RabbitMQ 案例：订单状态流转完整演示
-
-以下演示如何使用 RabbitMQ 模块实现一个完整的订单状态流转，从创建到收货。
-
-#### 步骤 1：启动 RabbitMQ 环境
-
-```bash
-cd docker
-docker-compose -f docker-compose-rabbitmq.yml up -d
-
-# 等待服务启动
-sleep 20
-
-# 验证 RabbitMQ 是否正常运行
-docker ps | grep rabbitmq
-```
-
-**预期输出：**
-```
-rabbitmq         Up 20s
-rabbitmq-mysql   Up 20s
-```
-
-#### 步骤 2：启动 RabbitMQ 应用
-
-```bash
-cd rabbitmq-orderly
-mvn spring-boot:run
-```
-
-**预期输出：**
-```
-Started RabbitMQApplication in 3.2 seconds
-```
-
-#### 步骤 3：测试订单状态流转
-
-创建测试类或使用 DemoApplication 演示：
-
-```java
-// 发送订单创建消息
-producer.sendOrderMessage(1001, "CREATE_ORDER", 1);
-
-// 发送订单支付消息
-producer.sendOrderMessage(1001, "PAY_ORDER", 2);
-
-// 发送订单发货消息
-producer.sendOrderMessage(1001, "SHIP_ORDER", 3);
-
-// 发送订单收货消息
-producer.sendOrderMessage(1001, "RECEIVE_ORDER", 4);
-```
-
-#### 步骤 4：验证订单状态
-
-```bash
-# 登录 MySQL 容器
-docker exec -it rabbitmq-mysql mysql -uroot -popc.tang2026
-
-# 查询订单状态
-USE rocketmq_orderly;
-SELECT * FROM `order` WHERE id = 1001;
-```
-
-**预期输出：**
-```
-+------+---------+---------+---------------------+---------------------+
-| id   | status  | version | create_time         | update_time         |
-+------+---------+---------+---------------------+---------------------+
-| 1001 | RECEIVED| 4       | 2026-04-19 10:00:00| 2026-04-19 10:01:00|
-+------+---------+---------+---------------------+---------------------+
-```
-
-#### 步骤 5：测试局部顺序
-
-快速发送多个订单的多个事件：
-
-```java
-// 订单1002、1003、1004并发发送消息
-for (int orderId : new int[]{1002, 1003, 1004}) {
-    new Thread(() -> {
-        producer.sendOrderMessages(orderId,
-            "CREATE_ORDER", "PAY_ORDER", "SHIP_ORDER");
-    }).start();
+@RabbitListener(queues = "OrderQueue0")
+public void onMessageQueue0(Message message) {
+    processOrderMessage(message, "OrderQueue0");
 }
 ```
 
-**预期结果：**
-- 订单1002、1003、1004各自按顺序消费
-- 不同订单的消息可以并行处理
-- 订单1002(1002%3=2) → OrderQueue2
-- 订单1003(1003%3=1) → OrderQueue1
-- 订单1004(1004%3=2) → OrderQueue2
+**优点：**
+- 配置最简单，无额外依赖
+- 性能好，适合快速上手
 
-#### 步骤 6：测试版本号过滤
+**缺点：**
+- 多进程部署时，每个队列只能有一个消费者实例，否则顺序被破坏
+- 进程重启期间消息积压，消费者恢复后才能继续
+
+**适用场景：** 单机部署，或每个队列只需部署一个消费者实例的环境。
+
+---
+
+### 方案二：SAC 方案 `rabbitmq-orderly-sac`
+
+**原理：** 队列声明时添加 `x-single-active-consumer=true`，RabbitMQ 3.12+ 原生支持。
 
 ```java
-// 先发送支付消息
-producer.sendOrderMessage(1005, "PAY_ORDER", 2);
-
-// 再发送创建消息（version=1，过时消息）
-producer.sendOrderMessage(1005, "CREATE_ORDER", 1);
+// 队列创建时指定
+Map<String, Object> args = new HashMap<>();
+args.put("x-single-active-consumer", true);  // 核心配置
+args.put("x-dead-letter-exchange", "sac-order-exchange-dlx");
+args.put("x-dead-letter-routing-key", "dlq.order.0");
+return new Queue("SacOrderQueue0", true, false, false, args);
 ```
 
-**预期结果：** 创建消息会被过滤，订单状态保持为 PAID。
+**优点：**
+- Broker 原生保证，多进程部署时只有一个消费者活跃，其他standby
+- 活跃消费者断开时， standby 消费者自动接管，**消息不丢失**
+- 配置简单，不需要额外依赖
+- 生产环境推荐方案
 
-#### 步骤 7：查看 RabbitMQ 管理界面
+**缺点：**
+- 需要 RabbitMQ 3.12+（较新版本）
+- standby 消费者不会消费，只是保活
 
-访问 RabbitMQ 管理界面：http://localhost:15672
+**适用场景：** 多进程部署的生产环境，**首选方案**。
 
-- 用户名：admin
-- 密码：admin2026
+---
 
-**查看内容：**
-- Queues：OrderQueue0、OrderQueue1、OrderQueue2
-- Exchanges：order-exchange（Direct Exchange）
-- Bindings：
-  - OrderQueue0 ← order.0
-  - OrderQueue1 ← order.1
-  - OrderQueue2 ← order.2
+### 方案三：分布式锁方案 `rabbitmq-orderly-dlock`
 
-#### 步骤 8：运行测试验证
+**原理：** 消费消息时按 `orderId` 获取 Redisson 分布式锁，保证同一订单在多进程间串行处理。
 
+```java
+@Override
+protected void executeWithStrategy(OrderMessage orderMsg, String queueName) {
+    String lockKey = "order:lock:" + orderMsg.getOrderId();
+    RLock lock = redissonClient.getLock(lockKey);
+
+    try {
+        boolean acquired = lock.tryLock(10, 30, TimeUnit.SECONDS);
+        if (!acquired) {
+            throw new RuntimeException("获取分布式锁失败: orderId=" + orderMsg.getOrderId());
+        }
+        super.executeWithStrategy(orderMsg, queueName);  // 锁内执行业务
+    } finally {
+        if (lock.isHeldByCurrentThread()) {
+            lock.unlock();
+        }
+    }
+}
+```
+
+**优点：**
+- 灵活性最高，锁逻辑在代码层，可自由扩展
+- 适合跨多种 MQ 技术栈（RabbitMQ / RocketMQ / Kafka）共用同一套锁机制
+- 可精细控制锁粒度（按 orderId）
+
+**缺点：**
+- 依赖 Redisson（额外服务：Redis）
+- 每次消费都要加锁，有少量性能开销
+- 锁获取失败需要重试，增加复杂度
+
+**适用场景：** 需要跨多个 MQ 技术栈统一顺序保障，或业务逻辑需要跨服务协调的场景。
+
+---
+
+### 方案四：Exclusive Consumer 方案 `rabbitmq-orderly-exclusive`
+
+**原理：** `@RabbitListener` 设置 `concurrency="1"` + `exclusive="true"`，Broker 保证同时只有一个消费者能消费该队列。
+
+```java
+@RabbitListener(queues = "ExclusiveOrderQueue0", concurrency = "1", exclusive = true)
+public void onMessageQueue0(Message message) {
+    processOrderMessage(message, "ExclusiveOrderQueue0");
+}
+```
+
+**优点：**
+- Broker 原生保证，配置简单
+- 不需要额外依赖
+
+**缺点：**
+- **独占期间其他实例完全无法消费**，如果消费者断开连接，该队列在消费者重新连接之前处于无消费者状态，消息积压无法被处理
+- 与 SAC 方案相比，SAC 有 standby 机制，Exclusive 没有
+- 多进程部署时，其他进程无法参与消费，资源利用率低
+
+**适用场景：** 备选方案，当 SAC 不可用且无法使用分布式锁时的折中选择。**不推荐作为生产首选**。
+
+---
+
+### 选型建议
+
+| 场景 | 推荐方案 |
+|------|----------|
+| 单机部署 | 基础方案 |
+| 多进程部署 | **SAC 方案（首选）** |
+| 需跨 MQ 技术栈 | 分布式锁方案 |
+| SAC 不可用时的备选 | Exclusive Consumer |
+
+> 💡 **特别说明：** 本项目为 Tutorial（教程），四种方案均已实现并附有完整测试。选择哪种方案由业务场景决定，本项目仅提供参考实现。
+
+---
+
+## 测试用例说明
+
+每个模块均包含以下测试：
+
+| 测试用例 | 验证内容 |
+|----------|----------|
+| `testSingleOrderSequentialMessage` | 单订单顺序消息：CREATE → PAY → SHIP，最终状态 SHIPPING |
+| `testMultipleOrderConcurrentMessage` | 多订单并发：3个订单并发发送，最终状态均为 SHIPPING |
+| `testVersionFilter` | 版本号过滤：高版本消息先到，低版本消息后到，低版本被过滤 |
+| `testIdempotency` | 幂等性：同版本号消息重复发送，状态只更新一次 |
+| `testInvalidStatusTransition` | 非法流转拒绝：跳步操作（如 PENDING → RECEIVED）被拒绝 |
+
+运行测试：
 ```bash
 cd rabbitmq-orderly
 mvn test
 ```
 
-**预期结果：**
-- 所有测试用例通过
-- 验证局部顺序、版本号过滤、幂等性等
+---
 
-**总结：**
-- ✅ 成功演示了 RabbitMQ 的局部顺序消息
-- ✅ 验证了路由键机制保证同一订单进入同一队列
-- ✅ 验证了多队列并行消费的性能优势
-- ✅ 验证了版本号过滤和幂等性保护机制
+## RabbitMQ 公共模块 `rabbitmq-common`
+
+所有 RabbitMQ 模块共享以下公共代码：
+
+```java
+// 1. 统一消息模型
+OrderMessage msg = new OrderMessage(orderId, eventType, version);
+
+// 2. 状态机
+OrderStatusMachine.canTransition("PENDING", "PAID");  // true
+OrderStatusMachine.getTargetStatus("PAY_ORDER");       // "PAID"
+
+// 3. 消费者抽象基类（模板方法模式）
+public class OrderConsumer extends AbstractOrderConsumer {
+    // 子类只需覆盖 executeWithStrategy() 即可扩展（如加分布式锁）
+    @Override
+    protected void executeWithStrategy(OrderMessage orderMsg, String queueName) {
+        // 自定义策略，如加锁
+    }
+}
+```
+
+---
 
 ## 常见问题
 
-### Q1: 为什么不做全局有序？
+**Q: 为什么不做全局有序？**
 
-全局有序必须单消费者，性能差，无法横向扩展。在高并发场景下，我们只做业务维度局部有序。
+全局有序必须单消费者单队列，无法横向扩展，在高并发场景下性能差到不可接受。生产环境一律采用业务维度局部有序。
 
-### Q2: 如何保证同一订单的消息进入同一个队列？
+**Q: 如何保证同一订单进入同一队列？**
 
-RocketMQ：使用哈希路由，根据订单ID选择队列：`hash(orderId) % queueCount`
-RabbitMQ：使用订单ID作为路由键：`order.{orderId % queueCount}`，同一订单的消息进入同一队列
+`orderId % 3` 作为路由键，同一订单ID始终映射到同一个队列。
 
-### Q3: 如何保证队列被顺序消费？
+**Q: 网络乱序怎么办？**
 
-RocketMQ：使用 `ConsumeMode.ORDERLY` 模式
-RabbitMQ：每个队列配置单消费者监听
+版本号乐观锁：新消息 version ≤ 数据库当前 version → 跳过处理（消息过期）。
 
-### Q4: RabbitMQ 如何实现局部顺序？
+**Q: 如何防止重复消费？**
 
-使用订单ID作为路由键（`order.{orderId % queueCount}`），同一订单的消息会进入同一个队列，不同订单的消息可以进入不同队列，实现并行消费。
+两个层面：① 版本号相同则乐观锁 UPDATE 影响行数为0；② 数据库更新本身带 version 条件，天然幂等。
 
-### Q4: 如何防止订单状态乱序？
+---
 
-使用版本号做乐观锁，只有当版本号一致时才更新。
+## 参考资料
 
-## 参考文章
-
-- [RocketMQ顺序消息实战：保证订单状态机不乱序的完整方案](https://mp.weixin.qq.com/s/JHXqx91hY5A8a1Zug_ayLg)
-- [Apache RocketMQ GitHub](https://github.com/apache/rocketmq)
-- [RabbitMQ 官方文档](https://www.rabbitmq.com/documentation.html)
+- [RabbitMQ x-single-active-consumer](https://www.rabbitmq.com/consumers.html#single-active-consumers)
+- [RabbitMQ Dead Letter Exchanges](https://www.rabbitmq.com/dlx.html)
+- [Redisson 分布式锁](https://github.com/redisson/redisson)
+- [RocketMQ 顺序消息](https://rocketmq.apache.org/docs/4.x/java/02ordermessage)
 
 ## 许可证
 

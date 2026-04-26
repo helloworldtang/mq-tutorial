@@ -1,4 +1,4 @@
-package com.example.rabbitmq.producer;
+package com.example.rabbitmqsac.producer;
 
 import com.alibaba.fastjson2.JSON;
 import com.example.rabbitmq.common.constant.MQConstants;
@@ -12,14 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/**
- * RabbitMQ订单生产者（基础方案）
- *
- * 核心机制：
- * 1. 使用订单ID作为路由键，保证同一订单进入同一队列
- * 2. 配合Direct Exchange + 多队列，实现局部顺序
- * 3. 使用OrderMessage统一消息模型
- */
 @Component
 public class OrderProducer {
 
@@ -28,7 +20,7 @@ public class OrderProducer {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    @Value("${rabbitmq.exchange:order-exchange}")
+    @Value("${rabbitmq.exchange:sac-order-exchange}")
     private String exchange;
 
     public void sendOrderMessage(int orderId, String eventType, long version) {
@@ -48,11 +40,11 @@ public class OrderProducer {
             String routingKey = "order." + (orderId % MQConstants.DEFAULT_QUEUE_COUNT);
             rabbitTemplate.convertAndSend(exchange, routingKey, message);
 
-            logger.info("订单消息发送成功: orderId={}, eventType={}, routingKey={}, version={}",
+            logger.info("SAC订单消息发送成功: orderId={}, eventType={}, routingKey={}, version={}",
                     orderId, eventType, routingKey, version);
 
         } catch (Exception e) {
-            logger.error("订单消息发送失败: orderId={}, eventType={}", orderId, eventType, e);
+            logger.error("SAC订单消息发送失败: orderId={}, eventType={}", orderId, eventType, e);
             throw new RuntimeException("订单消息发送失败", e);
         }
     }
