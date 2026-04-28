@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RabbitMQ 顺序消息 - 封面</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px;
+    font-family: 'Noto Sans SC', -apple-system, sans-serif;
+  }
+
+  .cover {
+    width: 900px;
+    height: 500px;
+    background: linear-gradient(145deg, #0c0f1a 0%, #0f172a 40%, #1a1040 100%);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 70px;
+  }
+
+  /* 背景装饰：发光圆 */
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -80px;
+    right: -60px;
+    width: 360px;
+    height: 360px;
+    background: radial-gradient(circle, rgba(56,189,248,0.12) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    bottom: -100px;
+    left: -40px;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(124,58,237,0.1) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  /* 网格装饰线 */
+  .grid-line {
+    position: absolute;
+    background: rgba(56,189,248,0.04);
+  }
+  .grid-line.h1 { top: 25%; left: 0; right: 0; height: 1px; }
+  .grid-line.h2 { top: 75%; left: 0; right: 0; height: 1px; }
+  .grid-line.v1 { left: 25%; top: 0; bottom: 0; width: 1px; }
+  .grid-line.v2 { left: 75%; top: 0; bottom: 0; width: 1px; }
+
+  /* 标签 */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(56,189,248,0.12);
+    border: 1px solid rgba(56,189,248,0.25);
+    color: #38bdf8;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 28px;
+    position: relative;
+    z-index: 1;
+    letter-spacing: 1px;
+  }
+
+  /* 主标题 */
+  .main-title {
+    font-size: 42px;
+    font-weight: 900;
+    color: #f1f5f9;
+    line-height: 1.2;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 8px;
+  }
+  .main-title .highlight {
+    background: linear-gradient(135deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* 副标题 */
+  .subtitle {
+    font-size: 20px;
+    color: #64748b;
+    font-weight: 400;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 36px;
+  }
+  .subtitle em {
+    font-style: normal;
+    color: #94a3b8;
+    font-weight: 600;
+  }
+
+  /* 三大机制 */
+  .mechanisms {
+    display: flex;
+    gap: 16px;
+    position: relative;
+    z-index: 1;
+  }
+  .mech {
+    flex: 1;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    border-radius: 10px;
+    padding: 16px 20px;
+    backdrop-filter: blur(4px);
+  }
+  .mech-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: #38bdf8;
+    opacity: 0.6;
+    margin-bottom: 4px;
+    letter-spacing: 2px;
+  }
+  .mech-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+  }
+  .mech-desc {
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.5;
+  }
+  .mech:nth-child(2) { border-color: rgba(56,189,248,0.3); }
+  .mech:nth-child(2) .mech-num { color: #38bdf8; opacity: 1; }
+
+  /* 右侧装饰：消息流示意 */
+  .flow {
+    position: absolute;
+    right: 70px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1;
+  }
+  .flow-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .flow-item.out-of-order {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+  }
+  .flow-item.correct {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+  }
+  .flow-arrow {
+    color: #475569;
+    font-size: 18px;
+    text-align: center;
+    padding: 2px 0;
+  }
+
+  /* 底部作者信息 */
+  .footer {
+    position: absolute;
+    bottom: 24px;
+    left: 70px;
+    right: 70px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1;
+  }
+  .footer-left {
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+  .footer-right {
+    color: #334155;
+    font-size: 12px;
+  }
+
+  /* 保存按钮 */
+  .save-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+  }
+  .save-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(37, 99, 235, 0.5);
+  }
+  .save-btn:active { transform: translateY(0); }
+  .save-btn.saving { opacity: 0.7; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="cover" id="cover">
+  <div class="grid-line h1"></div>
+  <div class="grid-line h2"></div>
+  <div class="grid-line v1"></div>
+  <div class="grid-line v2"></div>
+
+  <div class="tag">🐇 RabbitMQ 实战</div>
+
+  <div class="main-title">
+    <span class="highlight">顺序消息</span>：先发的后收到<br>怎么解决？
+  </div>
+
+  <div class="subtitle">哈希路由 + 单消费者 + <em>版本号过滤</em>，三层保障实现局部顺序</div>
+
+  <div class="mechanisms">
+    <div class="mech">
+      <div class="mech-num">01</div>
+      <div class="mech-name">哈希路由</div>
+      <div class="mech-desc">orderId % N → 同订单入同队列</div>
+    </div>
+    <div class="mech">
+      <div class="mech-num">02</div>
+      <div class="mech-name">版本号过滤</div>
+      <div class="mech-desc">msgVersion ≤ dbVersion → 跳过</div>
+    </div>
+    <div class="mech">
+      <div class="mech-num">03</div>
+      <div class="mech-name">乐观锁更新</div>
+      <div class="mech-desc">WHERE version = old → 原子性</div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="flow-item out-of-order">支付(v=2) 先到 ❌</div>
+    <div class="flow-arrow">↓ 版本号过滤</div>
+    <div class="flow-item correct">创建(v=1) → 跳过 ✅</div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left">码骨丹心</div>
+    <div class="footer-right">github.com/helloworldtang/mq-tutorial</div>
+  </div>
+</div>
+
+<button class="save-btn" onclick="saveAsImage()">💾 保存图片</button>
+
+<script>
+async function saveAsImage() {
+  const btn = document.querySelector('.save-btn');
+  btn.textContent = '⏳ 生成中...';
+  btn.classList.add('saving');
+  try {
+    const cover = document.getElementById('cover');
+    const canvas = await html2canvas(cover, {
+      backgroundColor: '#0a0a0a',
+      scale: 2,
+      useCORS: true,
+      logging: false
+    });
+    const link = document.createElement('a');
+    link.download = 'RabbitMQ顺序消息-封面.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch (e) {
+    alert('保存失败，请截图');
+  } finally {
+    btn.innerHTML = '💾 保存图片';
+    btn.classList.remove('saving');
+  }
+}
+</script>
+
+</body>
+</html>

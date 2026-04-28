@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RabbitMQ 顺序消息架构图</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container {
+    width: 100%;
+    max-width: 1000px;
+  }
+  .title {
+    text-align: center;
+    color: #e2e8f0;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 48px;
+    letter-spacing: 1px;
+  }
+  .title span { color: #38bdf8; }
+
+  /* 节点通用样式 */
+  .node {
+    border-radius: 12px;
+    padding: 20px 28px;
+    text-align: center;
+    position: relative;
+  }
+  .node-icon { font-size: 20px; margin-bottom: 6px; }
+  .node-title { font-weight: 700; font-size: 15px; }
+  .node-sub { font-size: 12px; margin-top: 4px; opacity: 0.7; }
+
+  /* 生产者 */
+  .producer {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: #fff;
+    max-width: 420px;
+    margin: 0 auto;
+    box-shadow: 0 4px 24px rgba(124, 58, 237, 0.35);
+  }
+
+  /* 交换机 */
+  .exchange {
+    background: linear-gradient(135deg, #0891b2, #0e7490);
+    color: #fff;
+    max-width: 400px;
+    margin: 0 auto;
+    box-shadow: 0 4px 24px rgba(8, 145, 178, 0.35);
+  }
+  .exchange-type {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  .exchange-reason {
+    font-size: 11px;
+    margin-top: 6px;
+    opacity: 0.85;
+    background: rgba(0,0,0,0.2);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
+
+  /* 队列 */
+  .queues-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 0 auto;
+    max-width: 900px;
+  }
+  .queue {
+    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(30, 64, 175, 0.35);
+  }
+  .queue .node-sub { color: #93c5fd; }
+
+  /* 处理步骤 */
+  .step {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid #334155;
+    color: #94a3b8;
+    max-width: 200px;
+    margin: 0 auto;
+    padding: 12px 16px;
+  }
+  .step .node-icon { font-size: 16px; }
+  .step .node-title { font-size: 13px; color: #cbd5e1; }
+
+  /* 数据库 */
+  .database {
+    background: linear-gradient(135deg, #b45309, #92400e);
+    color: #fff;
+    max-width: 420px;
+    margin: 0 auto;
+    box-shadow: 0 4px 24px rgba(180, 83, 9, 0.35);
+  }
+
+  /* 连接线 */
+  .connector {
+    text-align: center;
+    color: #475569;
+    padding: 6px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .connector .arrow-line {
+    width: 2px;
+    height: 24px;
+    background: linear-gradient(to bottom, #475569, #64748b);
+    position: relative;
+  }
+  .connector .arrow-line::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #64748b;
+  }
+  .connector .label {
+    font-size: 11px;
+    color: #64748b;
+    margin: 2px 0;
+    white-space: nowrap;
+  }
+
+  /* 扇出连接器 */
+  .fan-out {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    max-width: 900px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .fan-out svg { width: 100%; height: 50px; }
+
+  /* 步骤列 */
+  .steps-columns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .steps-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* 底部说明 */
+  .legend {
+    margin-top: 48px;
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  /* 保存按钮 */
+  .save-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .save-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(37, 99, 235, 0.5);
+  }
+  .save-btn:active { transform: translateY(0); }
+  .save-btn.saving { opacity: 0.7; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="container" id="diagram">
+  <div class="title">RabbitMQ <span>顺序消息</span> 架构图</div>
+
+  <!-- 生产者 -->
+  <div class="node producer">
+    <div class="node-icon">📤</div>
+    <div class="node-title">生产者</div>
+    <div class="node-sub">同订单消息绑定统一路由Key + 递增版本号</div>
+  </div>
+
+  <!-- 连接线：生产者 → 交换机 -->
+  <div class="connector">
+    <div class="label">哈希路由Key: order.{orderId % 3}</div>
+    <div class="arrow-line"></div>
+  </div>
+
+  <!-- 交换机 -->
+  <div class="node exchange">
+    <div class="node-icon">🔀</div>
+    <div class="node-title">Direct 交换机</div>
+    <div class="node-sub">order-exchange</div>
+    <div class="exchange-type">direct</div>
+    <div class="exchange-reason">RoutingKey = BindingKey 精准匹配 → 1:1 投递</div>
+  </div>
+
+  <!-- 扇出连接线 -->
+  <div class="fan-out">
+    <svg viewBox="0 0 900 50" preserveAspectRatio="xMidYMid meet">
+      <line x1="450" y1="0" x2="150" y2="50" stroke="#475569" stroke-width="2"/>
+      <line x1="450" y1="0" x2="450" y2="50" stroke="#475569" stroke-width="2"/>
+      <line x1="450" y1="0" x2="750" y2="50" stroke="#475569" stroke-width="2"/>
+      <!-- 箭头 -->
+      <polygon points="150,50 145,42 155,42" fill="#64748b"/>
+      <polygon points="450,50 445,42 455,42" fill="#64748b"/>
+      <polygon points="750,50 745,42 755,42" fill="#64748b"/>
+      <!-- 标签 -->
+      <text x="270" y="30" fill="#64748b" font-size="11" text-anchor="middle">order.0</text>
+      <text x="450" y="30" fill="#64748b" font-size="11" text-anchor="middle">order.1</text>
+      <text x="630" y="30" fill="#64756b" font-size="11" text-anchor="middle">order.2</text>
+    </svg>
+  </div>
+
+  <!-- 队列 -->
+  <div class="queues-row">
+    <div class="node queue">
+      <div class="node-icon">📬</div>
+      <div class="node-title">分片队列 0</div>
+      <div class="node-sub">SAC 单活跃消费者</div>
+    </div>
+    <div class="node queue">
+      <div class="node-icon">📬</div>
+      <div class="node-title">分片队列 1</div>
+      <div class="node-sub">SAC 单活跃消费者</div>
+    </div>
+    <div class="node queue">
+      <div class="node-icon">📬</div>
+      <div class="node-title">分片队列 2</div>
+      <div class="node-sub">SAC 单活跃消费者</div>
+    </div>
+  </div>
+
+  <!-- 队列 → 步骤 连接线 -->
+  <div class="fan-out">
+    <svg viewBox="0 0 900 30" preserveAspectRatio="xMidYMid meet">
+      <line x1="150" y1="0" x2="150" y2="30" stroke="#475569" stroke-width="2"/>
+      <line x1="450" y1="0" x2="450" y2="30" stroke="#475569" stroke-width="2"/>
+      <line x1="750" y1="0" x2="750" y2="30" stroke="#475569" stroke-width="2"/>
+      <polygon points="150,30 145,22 155,22" fill="#64748b"/>
+      <polygon points="450,30 445,22 455,22" fill="#64748b"/>
+      <polygon points="750,30 745,22 755,22" fill="#64748b"/>
+    </svg>
+  </div>
+
+  <!-- 三列处理步骤 -->
+  <div class="steps-columns">
+    <div class="steps-column">
+      <div class="node step">
+        <div class="node-icon">🔢</div>
+        <div class="node-title">版本号时序过滤</div>
+      </div>
+      <div class="connector"><div class="arrow-line" style="height:16px"></div></div>
+      <div class="node step">
+        <div class="node-icon">✅</div>
+        <div class="node-title">业务状态机校验</div>
+      </div>
+      <div class="connector"><div class="arrow-line" style="height:16px"></div></div>
+      <div class="node step">
+        <div class="node-icon">🔒</div>
+        <div class="node-title">数据库乐观锁更新</div>
+      </div>
+    </div>
+    <div class="steps-column">
+      <div class="node step">
+        <div class="node-icon">🔢</div>
+        <div class="node-title">版本号时序过滤</div>
+      </div>
+      <div class="connector"><div class="arrow-line" style="height:16px"></div></div>
+      <div class="node step">
+        <div class="node-icon">✅</div>
+        <div class="node-title">业务状态机校验</div>
+      </div>
+      <div class="connector"><div class="arrow-line" style="height:16px"></div></div>
+      <div class="node step">
+        <div class="node-icon">🔒</div>
+        <div class="node-title">数据库乐观锁更新</div>
+      </div>
+    </div>
+    <div class="steps-column">
+      <div class="node step">
+        <div class="node-icon">🔢</div>
+        <div class="node-title">版本号时序过滤</div>
+      </div>
+      <div class="connector"><div class="arrow-line" style="height:16px"></div></div>
+      <div class="node step">
+        <div class="node-icon">✅</div>
+        <div class="node-title">业务状态机校验</div>
+      </div>
+      <div class="connector"><div class="arrow-line" style="height:16px"></div></div>
+      <div class="node step">
+        <div class="node-icon">🔒</div>
+        <div class="node-title">数据库乐观锁更新</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤 → 数据库 连接线 -->
+  <div class="fan-out">
+    <svg viewBox="0 0 900 40" preserveAspectRatio="xMidYMid meet">
+      <line x1="150" y1="0" x2="450" y2="40" stroke="#475569" stroke-width="2"/>
+      <line x1="450" y1="0" x2="450" y2="40" stroke="#475569" stroke-width="2"/>
+      <line x1="750" y1="0" x2="450" y2="40" stroke="#475569" stroke-width="2"/>
+      <polygon points="450,40 445,32 455,32" fill="#64748b"/>
+    </svg>
+  </div>
+
+  <!-- 数据库 -->
+  <div class="node database">
+    <div class="node-icon">🗄️</div>
+    <div class="node-title">MySQL 业务主表</div>
+    <div class="node-sub">状态 + 版本号（原子性更新）</div>
+  </div>
+
+  <!-- 图例 -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #7c3aed;"></div>
+      生产者
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #0891b2;"></div>
+      Direct 交换机
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #1d4ed8;"></div>
+      分片队列
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #334155;"></div>
+      消费处理
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background: #b45309;"></div>
+      持久化
+    </div>
+  </div>
+</div>
+
+<button class="save-btn" onclick="saveAsImage()">💾 保存图片</button>
+
+<script>
+async function saveAsImage() {
+  const btn = document.querySelector('.save-btn');
+  btn.textContent = '⏳ 生成中...';
+  btn.classList.add('saving');
+  
+  try {
+    const diagram = document.getElementById('diagram');
+    const canvas = await html2canvas(diagram, {
+      backgroundColor: '#0f172a',
+      scale: 2,
+      useCORS: true,
+      logging: false
+    });
+    
+    const link = document.createElement('a');
+    link.download = 'rabbitmq-顺序消息架构图.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch (e) {
+    console.error(e);
+    alert('保存失败，请使用浏览器截图');
+  } finally {
+    btn.innerHTML = '💾 保存图片';
+    btn.classList.remove('saving');
+  }
+}
+</script>
+
+</body>
+</html>

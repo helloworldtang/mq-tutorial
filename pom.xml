@@ -35,6 +35,7 @@
         <module>rabbitmq-orderly-sac</module>
         <module>rabbitmq-orderly-dlock</module>
         <module>rabbitmq-orderly-exclusive</module>
+        <module>kafka-orderly</module>
     </modules>
 
     <dependencyManagement>
